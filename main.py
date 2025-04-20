@@ -9,15 +9,7 @@ import sqlalchemy
 
 @functions_framework.http
 def hello_http(request):
-    """HTTP Cloud Function.
-    Args:
-        request (flask.Request): The request object.
-        <https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data>
-    Returns:
-        The response text, or any set of values that can be turned into a
-        Response object using `make_response`
-        <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
-    """
+
     location = request.get_json()["name"]
     client = gc.Client()
     blob = client.get_bucket("lamprey-pipeline-group3-textstore").blob(location)
@@ -52,7 +44,7 @@ def hello_http(request):
     data_clean = data_clean.sort_values(by = ['TIMESTAMP'])
     conn = getEngine()
     print("writing df to table")
-    data_clean.to_sql(con=conn, name="LAMPREY_DETECTION", index=False, if_exists="append")
+    data_clean.to_sql(con=conn, name="PIT_DETECTION", index=False, if_exists="append")
 
     print(data_clean.head())
 
