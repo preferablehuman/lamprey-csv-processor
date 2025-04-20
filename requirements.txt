@@ -1,4 +1,7 @@
 functions-framework==3.*
 numpy
 pandas
-google.cloud.storage
+google-cloud-storage
+cloud-sql-python-connector
+pg8000
+sqlalchemy==2.0.7

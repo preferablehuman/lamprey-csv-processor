@@ -3,6 +3,9 @@ import pandas as pd
 import io
 import google.cloud.storage as gc
 import numpy as np
+from google.cloud.sql.connector import Connector
+import pg8000
+import sqlalchemy
 
 @functions_framework.http
 def hello_http(request):
@@ -15,20 +18,17 @@ def hello_http(request):
         Response object using `make_response`
         <https://flask.palletsprojects.com/en/1.1.x/api/#flask.make_response>.
     """
-
+    location = request.get_json()["name"]
     client = gc.Client()
-    blob = client.get_bucket("lamprey-pipeline-group3-textstore").blob("040224PitDetectionData.csv")
-    # blob.download_to_filename("current_file.csv")
+    blob = client.get_bucket("lamprey-pipeline-group3-textstore").blob(location)
+    blob.download_to_filename("current_file.csv")
     contents = blob.download_as_bytes()
-    # return cv2.VideoCapture("current_file.mp4")
-    # return cv2.VideoCapture(contents)
 
     byte_io = io.BytesIO(contents)
     data = pd.read_csv(byte_io)
-    # df = pd.read_excel(byte_io)
 
     data = data.drop_duplicates()
-    data = data.sort_values(by = ['Tag ID', 'Date & Time'])
+    data = data.sort_values(by = ['TAG_ID', 'TIMESTAMP'])
 
     antenna_clean = np.array([])
     id_clean = np.array([])
@@ -36,24 +36,50 @@ def hello_http(request):
     data_clean = pd.DataFrame()
 
     for index in range(1, len(data)):
-        if data['Antenna'].iloc[index] == data['Antenna'].iloc[index-1] and data['Tag ID'].iloc[index] == data['Tag ID'].iloc[index-1]:
-            if pd.Period(data['Date & Time'].iloc[index]) - pd.Period(data['Date & Time'].iloc[index-1]) > pd.Timedelta(10, 's'):
-                antenna_clean = np.append(antenna_clean, str(data['Antenna'].iloc[index]))
-                id_clean = np.append(id_clean, str(data['Tag ID'].iloc[index]))
-                time_clean = np.append(time_clean, data['Date & Time'].iloc[index])
+        if data['ANTENNA'].iloc[index] == data['ANTENNA'].iloc[index-1] and data['TAG_ID'].iloc[index] == data['TAG_ID'].iloc[index-1]:
+            if pd.Period(data['TIMESTAMP'].iloc[index]) - pd.Period(data['TIMESTAMP'].iloc[index-1]) > pd.Timedelta(10, 's'):
+                antenna_clean = np.append(antenna_clean, str(data['ANTENNA'].iloc[index]))
+                id_clean = np.append(id_clean, str(data['TAG_ID'].iloc[index]))
+                time_clean = np.append(time_clean, data['TIMESTAMP'].iloc[index])
         else:
-            antenna_clean = np.append(antenna_clean, str(data['Antenna'].iloc[index]))
-            id_clean = np.append(id_clean, str(data['Tag ID'].iloc[index]))
-            time_clean = np.append(time_clean, data['Date & Time'].iloc[index])
+            antenna_clean = np.append(antenna_clean, str(data['ANTENNA'].iloc[index]))
+            id_clean = np.append(id_clean, str(data['TAG_ID'].iloc[index]))
+            time_clean = np.append(time_clean, data['TIMESTAMP'].iloc[index])
 
-    data_clean['Antenna'] = antenna_clean
-    data_clean['Tag ID'] = id_clean
-    data_clean['Date & Time'] = time_clean
-    data_clean = data_clean.sort_values(by = ['Date & Time'])
+    data_clean['ANTENNA'] = antenna_clean
+    data_clean['TAG_ID'] = id_clean
+    data_clean['TIMESTAMP'] = time_clean
+    data_clean = data_clean.sort_values(by = ['TIMESTAMP'])
+    conn = getEngine()
+    print("writing df to table")
+    data_clean.to_sql(con=conn, name="LAMPREY_DETECTION", index=False, if_exists="append")
 
     print(data_clean.head())
 
-    request_json = request.get_json(silent=True)
-    request_args = request.args
+    return "CSV processed", 200
 
-    return request_json
+def getEngine():
+    print("getting sql instance")
+    instance_connection_name = os.environ["INSTANCE_CONNECTION_NAME"]
+    db_user = os.environ["DB_USER"]
+    db_pass = os.environ["DB_PASS"]
+    db_name = os.environ["DB_NAME"]
+
+    connector = Connector()
+
+    def getconn():
+        conn = connector.connect(
+            instance_connection_name,
+            "pg8000",
+            user=db_user,
+            password=db_pass,
+            db=db_name,
+        )
+        return conn
+
+    engine = sqlalchemy.create_engine(
+        "postgresql+pg8000://",
+        creator=getconn,
+    )
+    print("secured connection")
+    return engine
