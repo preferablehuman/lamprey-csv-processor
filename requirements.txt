@@ -1,0 +1,4 @@
+functions-framework==3.*
+numpy
+pandas
+google.cloud.storage
